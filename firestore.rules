@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// Reglas en "modo de prueba": permiten lectura y escritura sin autenticacion
+// hasta la fecha indicada. Sirven para el ejercicio del modulo, NO para
+// produccion: cualquiera que conozca el id del proyecto puede leer y escribir.
+//
+// Antes de esa fecha hay que reemplazarlas por reglas reales, por ejemplo
+// exigiendo request.auth != null y acotando por usuario.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2026, 12, 26);
+    }
+  }
+}
