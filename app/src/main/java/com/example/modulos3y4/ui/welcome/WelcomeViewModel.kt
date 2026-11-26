@@ -47,6 +47,9 @@ data class WelcomeUiState(
      */
     val isCurrentSaved: Boolean
         get() = position != null && history.any { it.timestamp == position.timestamp }
+
+    /** Cuantos registros del historial faltan por subir a Firestore. */
+    val pendingSyncCount: Int get() = history.count { !it.isSynced }
 }
 
 class WelcomeViewModel(
@@ -89,6 +92,13 @@ class WelcomeViewModel(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = WelcomeUiState()
     )
+
+    init {
+        // Red de seguridad: si una sincronizacion anterior agoto sus reintentos,
+        // o quedaron pendientes de una version sin Firestore, se reintenta al
+        // abrir la pantalla. Es idempotente y no hace nada si no hay pendientes.
+        repository.syncPendingToFirestore()
+    }
 
     fun onDownloadClick() = repository.download()
 

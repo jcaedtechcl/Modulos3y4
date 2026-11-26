@@ -171,6 +171,7 @@ fun WelcomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
             HistoryHeader(
                 count = uiState.history.size,
+                pendingCount = uiState.pendingSyncCount,
                 onClearHistory = onClearHistory
             )
         }
@@ -289,6 +290,7 @@ private fun CurrentReadingCard(
 @Composable
 private fun HistoryHeader(
     count: Int,
+    pendingCount: Int,
     onClearHistory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -297,10 +299,18 @@ private fun HistoryHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = if (count == 0) "Historial" else "Historial ($count)",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Column {
+            Text(
+                text = if (count == 0) "Historial" else "Historial ($count)",
+                style = MaterialTheme.typography.titleMedium
+            )
+            if (pendingCount > 0) {
+                Text(
+                    text = "$pendingCount pendiente(s) de sincronizar",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
         if (count > 0) {
             TextButton(onClick = onClearHistory) {
                 Text("Borrar todo")
@@ -329,6 +339,19 @@ private fun HistoryRow(
             Text(
                 text = "Guardado: ${formatInstant(record.savedAt)}",
                 style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                text = if (record.isSynced) {
+                    "✓ Sincronizado con Firestore"
+                } else {
+                    "⏳ Pendiente de subir"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (record.isSynced) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
         }
         TextButton(onClick = onDelete) {
@@ -386,14 +409,16 @@ fun WelcomeScreenWithHistoryPreview() {
                     latitude = -33.4489,
                     longitude = -70.6693,
                     timestamp = 1764100000,
-                    savedAt = 1764100000_000
+                    savedAt = 1764100000_000,
+                    isSynced = false
                 ),
                 IssPositionRecord(
                     id = 2,
                     latitude = 12.3456,
                     longitude = -45.6789,
                     timestamp = 1764090000,
-                    savedAt = 1764090000_000
+                    savedAt = 1764090000_000,
+                    isSynced = true
                 )
             )
         )

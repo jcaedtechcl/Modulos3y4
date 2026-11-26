@@ -18,5 +18,13 @@ data class IssPositionRecord(
     /** Marca de tiempo que informa la API, en segundos desde epoch. */
     val timestamp: Long,
     /** Momento en que el usuario guardo el registro, en milisegundos desde epoch. */
-    val savedAt: Long
+    val savedAt: Long,
+    /**
+     * false mientras el registro no se haya subido a Firestore.
+     *
+     * Se guarda en la base y no se deduce en memoria porque el pendiente debe
+     * sobrevivir al cierre de la app: si el proceso muere antes de subir, al
+     * volver a abrir hay que saber que quedaba por sincronizar.
+     */
+    val isSynced: Boolean = false
 )

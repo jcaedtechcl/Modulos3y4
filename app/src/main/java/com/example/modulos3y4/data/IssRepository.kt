@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.example.modulos3y4.work.FirestoreSyncWorker
 import com.example.modulos3y4.work.IssSyncWorker
 import kotlinx.coroutines.flow.Flow
 import java.util.concurrent.TimeUnit
@@ -70,8 +71,33 @@ class IssRepository(
                 latitude = position.latitude,
                 longitude = position.longitude,
                 timestamp = position.timestamp,
-                savedAt = System.currentTimeMillis()
+                savedAt = System.currentTimeMillis(),
+                // Nace pendiente: primero se asegura el dato en local y recien
+                // despues se intenta subir, nunca al reves.
+                isSynced = false
             )
+        )
+        syncPendingToFirestore()
+    }
+
+    /**
+     * Encola la subida de todo lo pendiente.
+     *
+     * REPLACE y no KEEP a proposito: si ya hay una sincronizacion corriendo, esa
+     * ejecucion leyo la lista de pendientes antes de que existiera este registro
+     * nuevo y lo dejaria sin subir. Reemplazarla es seguro porque la subida es
+     * idempotente y cada registro se marca apenas se sube.
+     */
+    fun syncPendingToFirestore() {
+        val request = OneTimeWorkRequestBuilder<FirestoreSyncWorker>()
+            .setConstraints(networkConstraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+            .build()
+
+        workManager.enqueueUniqueWork(
+            FIRESTORE_SYNC_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request
         )
     }
 
@@ -111,6 +137,7 @@ class IssRepository(
     companion object {
         private const val WORK_NAME = "iss_sync"
         private const val PERIODIC_WORK_NAME = "iss_sync_periodic"
+        private const val FIRESTORE_SYNC_WORK_NAME = "firestore_sync"
 
         /**
          * 15 minutos es el intervalo minimo que admite WorkManager
