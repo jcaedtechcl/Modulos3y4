@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    api.open-notify.org solo publica la API sobre HTTP, y desde API 28 Android
+    bloquea el trafico en claro por defecto. Se habilita unicamente para ese
+    dominio en lugar de usar android:usesCleartextTraffic="true", que lo
+    permitiria para toda la aplicacion.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">api.open-notify.org</domain>
+    </domain-config>
+</network-security-config>

@@ -16,7 +16,7 @@ import com.example.modulos3y4.data.AppDatabase
 import com.example.modulos3y4.data.AuthRepository
 import com.example.modulos3y4.ui.login.LoginScreen
 import com.example.modulos3y4.ui.theme.Modulos3y4Theme
-import com.example.modulos3y4.ui.welcome.WelcomeScreen
+import com.example.modulos3y4.ui.welcome.WelcomeRoute
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else {
-                        WelcomeScreen(
+                        WelcomeRoute(
                             username = user,
                             onLogout = { loggedUser = null },
                             modifier = Modifier.padding(innerPadding)
