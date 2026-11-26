@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -27,30 +30,30 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.modulos3y4.data.AuthResult
+import com.example.modulos3y4.data.AuthOutcome
 import com.example.modulos3y4.ui.theme.Modulos3y4Theme
 import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
-    onLogin: suspend (String, String) -> AuthResult,
-    onRegister: suspend (String, String) -> AuthResult,
+    onLogin: suspend (String, String) -> AuthOutcome,
+    onRegister: suspend (String, String) -> AuthOutcome,
     onSuccess: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var username by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    fun submit(action: suspend (String, String) -> AuthResult) {
+    fun submit(action: suspend (String, String) -> AuthOutcome) {
         loading = true
         message = null
         scope.launch {
-            when (val result = action(username, password)) {
-                is AuthResult.Success -> onSuccess(result.username)
-                is AuthResult.Error -> message = result.message
+            when (val result = action(email, password)) {
+                is AuthOutcome.Success -> onSuccess(result.email)
+                is AuthOutcome.Error -> message = result.message
             }
             loading = false
         }
@@ -66,11 +69,16 @@ fun LoginScreen(
         Text(text = "Iniciar sesión", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(24.dp))
         OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
-            label = { Text("Usuario") },
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Correo electrónico") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            // El teclado de correo evita la mayuscula inicial automatica, que es
+            // la causa habitual de que Firebase rechace una direccion valida.
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            ),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -78,6 +86,7 @@ fun LoginScreen(
             value = password,
             onValueChange = { password = it },
             label = { Text("Contraseña") },
+            supportingText = { Text("Mínimo 6 caracteres") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
@@ -96,6 +105,14 @@ fun LoginScreen(
             enabled = !loading,
             modifier = Modifier.fillMaxWidth()
         ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             Text("Ingresar")
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -104,7 +121,7 @@ fun LoginScreen(
             enabled = !loading,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Registrarse")
+            Text("Crear cuenta")
         }
     }
 }
@@ -114,8 +131,20 @@ fun LoginScreen(
 fun LoginScreenPreview() {
     Modulos3y4Theme {
         LoginScreen(
-            onLogin = { _, _ -> AuthResult.Error("") },
-            onRegister = { _, _ -> AuthResult.Error("") },
+            onLogin = { _, _ -> AuthOutcome.Error("") },
+            onRegister = { _, _ -> AuthOutcome.Error("") },
+            onSuccess = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LoginScreenErrorPreview() {
+    Modulos3y4Theme {
+        LoginScreen(
+            onLogin = { _, _ -> AuthOutcome.Error("Correo o contraseña incorrectos") },
+            onRegister = { _, _ -> AuthOutcome.Error("") },
             onSuccess = {}
         )
     }

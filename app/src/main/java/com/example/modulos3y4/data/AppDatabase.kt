@@ -8,12 +8,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [User::class, IssPosition::class, IssPositionRecord::class],
-    version = 4,
+    entities = [IssPosition::class, IssPositionRecord::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun userDao(): UserDao
     abstract fun issPositionDao(): IssPositionDao
     abstract fun issHistoryDao(): IssHistoryDao
 
@@ -78,13 +77,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * La version 5 elimina la tabla `users`: la autenticacion paso a Firebase
+         * y las credenciales locales dejaron de usarse. Hay que borrarla de forma
+         * explicita porque Room valida que el esquema coincida con las entidades
+         * declaradas y una tabla de mas hace fallar la apertura.
+         *
+         * Las cuentas creadas con el login local se pierden: no se pueden migrar
+         * a Firebase porque de la contrasena solo se guardaba su hash.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `users`")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "modulos3y4.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }

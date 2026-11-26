@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
-import com.example.modulos3y4.data.AppDatabase
-import com.example.modulos3y4.data.AuthRepository
+import com.example.modulos3y4.data.FirebaseAuthRepository
 import com.example.modulos3y4.ui.login.LoginScreen
 import com.example.modulos3y4.ui.theme.Modulos3y4Theme
 import com.example.modulos3y4.ui.welcome.WelcomeRoute
@@ -22,24 +19,33 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val authRepository = AuthRepository(AppDatabase.getInstance(this).userDao())
+        val authRepository = FirebaseAuthRepository()
         setContent {
             Modulos3y4Theme {
-                // Usuario autenticado; null mientras se muestra el login.
-                var loggedUser by rememberSaveable { mutableStateOf<String?>(null) }
+                /**
+                 * La sesion la manda FirebaseAuth, no un estado de la pantalla:
+                 * el SDK la persiste, de modo que al reabrir la app el usuario
+                 * sigue autenticado. El valor inicial se toma de currentUser para
+                 * no mostrar el login un instante antes de que llegue el listener.
+                 */
+                val user by produceState(initialValue = authRepository.currentUser) {
+                    authRepository.authState.collect { value = it }
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    val user = loggedUser
-                    if (user == null) {
+                    val email = user?.email
+                    if (email == null) {
                         LoginScreen(
                             onLogin = authRepository::login,
                             onRegister = authRepository::register,
-                            onSuccess = { loggedUser = it },
+                            // El cambio de pantalla lo dispara el listener de
+                            // FirebaseAuth; aqui no hay que guardar nada.
+                            onSuccess = {},
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else {
                         WelcomeRoute(
-                            username = user,
-                            onLogout = { loggedUser = null },
+                            username = email,
+                            onLogout = authRepository::signOut,
                             modifier = Modifier.padding(innerPadding)
                         )
                     }
