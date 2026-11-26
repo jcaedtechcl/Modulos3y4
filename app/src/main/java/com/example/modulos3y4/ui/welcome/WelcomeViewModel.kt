@@ -10,50 +10,87 @@ import androidx.work.WorkManager
 import com.example.modulos3y4.data.AppDatabase
 import com.example.modulos3y4.data.IssPosition
 import com.example.modulos3y4.data.IssRepository
+import com.example.modulos3y4.data.NetworkMonitor
 import com.example.modulos3y4.work.IssSyncWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
+/**
+ * En que punto va la descarga. WorkManager no distingue por si solo entre "ya
+ * va a correr" y "detenido esperando red": ambos son el estado ENQUEUED, y
+ * mostrarlos igual hace que la app parezca colgada cuando no hay conexion.
+ */
+enum class DownloadStatus {
+    IDLE,
+    WAITING_FOR_NETWORK,
+    DOWNLOADING,
+    RETRYING
+}
+
 /** Estado inmutable que consume la pantalla. */
 data class WelcomeUiState(
     val position: IssPosition? = null,
-    val isDownloading: Boolean = false,
+    val status: DownloadStatus = DownloadStatus.IDLE,
     val errorMessage: String? = null
-)
+) {
+    val isBusy: Boolean get() = status != DownloadStatus.IDLE
+}
 
-class WelcomeViewModel(private val repository: IssRepository) : ViewModel() {
+class WelcomeViewModel(
+    private val repository: IssRepository,
+    networkMonitor: NetworkMonitor
+) : ViewModel() {
 
     /**
-     * El estado de la pantalla se deriva de dos fuentes: lo guardado en Room y el
-     * estado del trabajo en WorkManager. Al exponerlo como StateFlow la UI siempre
-     * tiene un valor con el que recomponer, incluso tras rotar la pantalla.
+     * El estado de la pantalla se deriva de tres fuentes: lo guardado en Room, el
+     * estado del trabajo en WorkManager y la conectividad real. Al exponerlo como
+     * StateFlow la UI siempre tiene un valor con el que recomponer, incluso tras
+     * rotar la pantalla.
      */
-    val uiState: StateFlow<WelcomeUiState> =
-        combine(repository.lastPosition, repository.syncInfo) { position, infos ->
-            val info = infos.lastOrNull()
-            WelcomeUiState(
-                position = position,
-                isDownloading = info?.state == WorkInfo.State.ENQUEUED ||
-                    info?.state == WorkInfo.State.RUNNING ||
-                    info?.state == WorkInfo.State.BLOCKED,
-                errorMessage = if (info?.state == WorkInfo.State.FAILED) {
-                    info.outputData.getString(IssSyncWorker.KEY_ERROR)
-                        ?: "No se pudo completar la descarga"
-                } else {
-                    null
-                }
-            )
-        }.stateIn(
-            scope = viewModelScope,
-            // Deja de observar 5 s despues de que la UI desaparece, para sobrevivir
-            // a cambios de configuracion sin reiniciar la suscripcion.
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = WelcomeUiState()
+    val uiState: StateFlow<WelcomeUiState> = combine(
+        repository.lastPosition,
+        repository.syncInfo,
+        networkMonitor.isOnline
+    ) { position, infos, isOnline ->
+        val info = infos.lastOrNull()
+        WelcomeUiState(
+            position = position,
+            status = info.toDownloadStatus(isOnline),
+            errorMessage = if (info?.state == WorkInfo.State.FAILED) {
+                info.outputData.getString(IssSyncWorker.KEY_ERROR)
+                    ?: "No se pudo completar la descarga"
+            } else {
+                null
+            }
         )
+    }.stateIn(
+        scope = viewModelScope,
+        // Deja de observar 5 s despues de que la UI desaparece, para sobrevivir
+        // a cambios de configuracion sin reiniciar la suscripcion.
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = WelcomeUiState()
+    )
 
     fun onDownloadClick() = repository.download()
+
+    /**
+     * runAttemptCount > 0 significa que el intento anterior fallo y el Worker
+     * esta dentro de su ventana de backoff, no en su primera ejecucion.
+     */
+    private fun WorkInfo?.toDownloadStatus(isOnline: Boolean): DownloadStatus = when (this?.state) {
+        WorkInfo.State.RUNNING ->
+            if (runAttemptCount > 0) DownloadStatus.RETRYING else DownloadStatus.DOWNLOADING
+
+        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> when {
+            !isOnline -> DownloadStatus.WAITING_FOR_NETWORK
+            runAttemptCount > 0 -> DownloadStatus.RETRYING
+            else -> DownloadStatus.DOWNLOADING
+        }
+
+        else -> DownloadStatus.IDLE
+    }
 
     companion object {
         /**
@@ -65,10 +102,11 @@ class WelcomeViewModel(private val repository: IssRepository) : ViewModel() {
                 val application = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]
                     ?: error("Falta el Application en el CreationExtras")
                 WelcomeViewModel(
-                    IssRepository(
+                    repository = IssRepository(
                         workManager = WorkManager.getInstance(application),
                         issPositionDao = AppDatabase.getInstance(application).issPositionDao()
-                    )
+                    ),
+                    networkMonitor = NetworkMonitor(application)
                 )
             }
         }

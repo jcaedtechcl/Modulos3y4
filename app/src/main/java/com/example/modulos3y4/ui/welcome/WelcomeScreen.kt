@@ -82,20 +82,36 @@ fun WelcomeScreen(
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onDownload,
-            enabled = !uiState.isDownloading,
+            enabled = !uiState.isBusy,
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (uiState.isDownloading) {
+            if (uiState.isBusy) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Descargando…")
-            } else {
-                Text(text = "Descargar posición de la ISS")
             }
+            Text(
+                text = when (uiState.status) {
+                    DownloadStatus.IDLE -> "Descargar posición de la ISS"
+                    DownloadStatus.WAITING_FOR_NETWORK -> "Esperando conexión…"
+                    DownloadStatus.DOWNLOADING -> "Descargando…"
+                    DownloadStatus.RETRYING -> "Reintentando…"
+                }
+            )
+        }
+
+        // Sin este aviso el boton deshabilitado con su spinner parece colgado:
+        // el trabajo sigue encolado y se ejecutara solo al volver la conexion.
+        if (uiState.status == DownloadStatus.WAITING_FOR_NETWORK) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Sin conexión. La descarga se reanudará automáticamente.",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
         }
 
         uiState.errorMessage?.let { error ->
@@ -184,7 +200,20 @@ fun WelcomeScreenDownloadingPreview() {
     Modulos3y4Theme {
         WelcomeScreen(
             username = "usuario",
-            uiState = WelcomeUiState(isDownloading = true),
+            uiState = WelcomeUiState(status = DownloadStatus.DOWNLOADING),
+            onDownload = {},
+            onLogout = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun WelcomeScreenWaitingForNetworkPreview() {
+    Modulos3y4Theme {
+        WelcomeScreen(
+            username = "usuario",
+            uiState = WelcomeUiState(status = DownloadStatus.WAITING_FOR_NETWORK),
             onDownload = {},
             onLogout = {}
         )
