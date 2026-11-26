@@ -9,6 +9,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.modulos3y4.data.AppDatabase
 import com.example.modulos3y4.data.IssPosition
+import com.example.modulos3y4.data.IssPositionRecord
 import com.example.modulos3y4.data.IssRepository
 import com.example.modulos3y4.data.NetworkMonitor
 import com.example.modulos3y4.work.IssSyncWorker
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * En que punto va la descarga. WorkManager no distingue por si solo entre "ya
@@ -34,9 +36,17 @@ data class WelcomeUiState(
     val position: IssPosition? = null,
     val status: DownloadStatus = DownloadStatus.IDLE,
     val errorMessage: String? = null,
-    val isPeriodicSyncEnabled: Boolean = false
+    val isPeriodicSyncEnabled: Boolean = false,
+    val history: List<IssPositionRecord> = emptyList()
 ) {
     val isBusy: Boolean get() = status != DownloadStatus.IDLE
+
+    /**
+     * Evita guardar dos veces la misma lectura: la marca de tiempo de la API
+     * identifica la medicion, independiente de cuando se haya descargado.
+     */
+    val isCurrentSaved: Boolean
+        get() = position != null && history.any { it.timestamp == position.timestamp }
 }
 
 class WelcomeViewModel(
@@ -54,8 +64,9 @@ class WelcomeViewModel(
         repository.lastPosition,
         repository.syncInfo,
         repository.periodicSyncInfo,
+        repository.history,
         networkMonitor.isOnline
-    ) { position, infos, periodicInfos, isOnline ->
+    ) { position, infos, periodicInfos, history, isOnline ->
         val info = infos.lastOrNull()
         WelcomeUiState(
             position = position,
@@ -68,7 +79,8 @@ class WelcomeViewModel(
             },
             // Un trabajo periodico nunca llega a SUCCEEDED: alterna entre ENQUEUED
             // y RUNNING mientras sigue activo, y solo termina si se cancela.
-            isPeriodicSyncEnabled = periodicInfos.any { !it.state.isFinished }
+            isPeriodicSyncEnabled = periodicInfos.any { !it.state.isFinished },
+            history = history
         )
     }.stateIn(
         scope = viewModelScope,
@@ -81,6 +93,20 @@ class WelcomeViewModel(
     fun onDownloadClick() = repository.download()
 
     fun onPeriodicSyncChange(enabled: Boolean) = repository.setPeriodicSyncEnabled(enabled)
+
+    /** Guarda la lectura actual en el historial; sin esto la descarga no persiste. */
+    fun onSaveCurrentClick() {
+        val position = uiState.value.position ?: return
+        viewModelScope.launch { repository.saveToHistory(position) }
+    }
+
+    fun onDeleteRecordClick(id: Long) {
+        viewModelScope.launch { repository.deleteFromHistory(id) }
+    }
+
+    fun onClearHistoryClick() {
+        viewModelScope.launch { repository.clearHistory() }
+    }
 
     /**
      * runAttemptCount > 0 significa que el intento anterior fallo y el Worker
@@ -111,7 +137,8 @@ class WelcomeViewModel(
                 WelcomeViewModel(
                     repository = IssRepository(
                         workManager = WorkManager.getInstance(application),
-                        issPositionDao = AppDatabase.getInstance(application).issPositionDao()
+                        issPositionDao = AppDatabase.getInstance(application).issPositionDao(),
+                        issHistoryDao = AppDatabase.getInstance(application).issHistoryDao()
                     ),
                     networkMonitor = NetworkMonitor(application)
                 )

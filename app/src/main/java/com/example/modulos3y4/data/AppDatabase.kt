@@ -7,10 +7,15 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [User::class, IssPosition::class], version = 2, exportSchema = false)
+@Database(
+    entities = [User::class, IssPosition::class, IssPositionRecord::class],
+    version = 3,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun issPositionDao(): IssPositionDao
+    abstract fun issHistoryDao(): IssHistoryDao
 
     companion object {
         @Volatile
@@ -38,13 +43,34 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * La version 3 agrega el historial que el usuario arma a mano. El DDL
+         * debe coincidir con el que genera Room para IssPositionRecord, porque
+         * Room valida el esquema al abrir la base despues de migrar.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `iss_position_history` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `latitude` REAL NOT NULL,
+                        `longitude` REAL NOT NULL,
+                        `timestamp` INTEGER NOT NULL,
+                        `savedAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "modulos3y4.db"
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }

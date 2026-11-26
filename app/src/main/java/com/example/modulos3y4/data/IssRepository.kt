@@ -21,11 +21,15 @@ import java.util.concurrent.TimeUnit
  */
 class IssRepository(
     private val workManager: WorkManager,
-    private val issPositionDao: IssPositionDao
+    private val issPositionDao: IssPositionDao,
+    private val issHistoryDao: IssHistoryDao
 ) {
 
-    /** Ultima posicion guardada; emite de nuevo cuando el Worker escribe en Room. */
+    /** Ultima posicion descargada; emite de nuevo cuando el Worker escribe en Room. */
     val lastPosition: Flow<IssPosition?> = issPositionDao.observeLatest()
+
+    /** Registros que el usuario decidio conservar, del mas reciente al mas antiguo. */
+    val history: Flow<List<IssPositionRecord>> = issHistoryDao.observeAll()
 
     /** Estado de la descarga manual, para saber si esta en curso o si fallo. */
     val syncInfo: Flow<List<WorkInfo>> =
@@ -55,6 +59,25 @@ class IssRepository(
         // duplicadas, se respeta la que ya esta corriendo.
         workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, request)
     }
+
+    /**
+     * Copia una lectura al historial. La descarga por si sola no almacena nada
+     * permanente: solo lo que pasa por aqui queda guardado.
+     */
+    suspend fun saveToHistory(position: IssPosition) {
+        issHistoryDao.insert(
+            IssPositionRecord(
+                latitude = position.latitude,
+                longitude = position.longitude,
+                timestamp = position.timestamp,
+                savedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun deleteFromHistory(id: Long) = issHistoryDao.deleteById(id)
+
+    suspend fun clearHistory() = issHistoryDao.clear()
 
     /**
      * Activa o desactiva la actualizacion automatica en segundo plano.
