@@ -2,6 +2,7 @@ package com.example.modulos3y4.ui.welcome
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,8 +10,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -19,12 +22,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.modulos3y4.data.IssPosition
+import com.example.modulos3y4.data.IssRepository
 import com.example.modulos3y4.ui.theme.Modulos3y4Theme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,6 +52,7 @@ fun WelcomeRoute(
         username = username,
         uiState = uiState,
         onDownload = viewModel::onDownloadClick,
+        onPeriodicSyncChange = viewModel::onPeriodicSyncChange,
         onLogout = onLogout,
         modifier = modifier
     )
@@ -57,6 +63,7 @@ fun WelcomeScreen(
     username: String,
     uiState: WelcomeUiState,
     onDownload: () -> Unit,
+    onPeriodicSyncChange: (Boolean) -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -124,6 +131,12 @@ fun WelcomeScreen(
             )
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+        PeriodicSyncOption(
+            checked = uiState.isPeriodicSyncEnabled,
+            onCheckedChange = onPeriodicSyncChange
+        )
+
         uiState.position?.let { position ->
             Spacer(modifier = Modifier.height(16.dp))
             IssPositionCard(position = position)
@@ -132,6 +145,43 @@ fun WelcomeScreen(
         Spacer(modifier = Modifier.height(32.dp))
         OutlinedButton(onClick = onLogout) {
             Text("Cerrar sesión")
+        }
+    }
+}
+
+/**
+ * El Row completo es la zona tactil, no solo la casilla: con toggleable el
+ * lector de pantalla anuncia una sola accion con rol de checkbox, por eso el
+ * Checkbox recibe onCheckedChange = null y no vuelve a capturar el toque.
+ */
+@Composable
+private fun PeriodicSyncOption(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                onValueChange = onCheckedChange,
+                role = Role.Checkbox
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = "Actualizar automáticamente",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = "En segundo plano, cada ${IssRepository.SYNC_INTERVAL_MINUTES} minutos.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
@@ -189,6 +239,7 @@ fun WelcomeScreenPreview() {
                 )
             ),
             onDownload = {},
+            onPeriodicSyncChange = {},
             onLogout = {}
         )
     }
@@ -202,6 +253,21 @@ fun WelcomeScreenDownloadingPreview() {
             username = "usuario",
             uiState = WelcomeUiState(status = DownloadStatus.DOWNLOADING),
             onDownload = {},
+            onPeriodicSyncChange = {},
+            onLogout = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun WelcomeScreenPeriodicSyncEnabledPreview() {
+    Modulos3y4Theme {
+        WelcomeScreen(
+            username = "usuario",
+            uiState = WelcomeUiState(isPeriodicSyncEnabled = true),
+            onDownload = {},
+            onPeriodicSyncChange = {},
             onLogout = {}
         )
     }
@@ -215,6 +281,7 @@ fun WelcomeScreenWaitingForNetworkPreview() {
             username = "usuario",
             uiState = WelcomeUiState(status = DownloadStatus.WAITING_FOR_NETWORK),
             onDownload = {},
+            onPeriodicSyncChange = {},
             onLogout = {}
         )
     }
@@ -228,6 +295,7 @@ fun WelcomeScreenErrorPreview() {
             username = "usuario",
             uiState = WelcomeUiState(errorMessage = "No se pudo conectar con la API. Revisa tu conexión."),
             onDownload = {},
+            onPeriodicSyncChange = {},
             onLogout = {}
         )
     }

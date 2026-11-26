@@ -33,7 +33,8 @@ enum class DownloadStatus {
 data class WelcomeUiState(
     val position: IssPosition? = null,
     val status: DownloadStatus = DownloadStatus.IDLE,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isPeriodicSyncEnabled: Boolean = false
 ) {
     val isBusy: Boolean get() = status != DownloadStatus.IDLE
 }
@@ -52,8 +53,9 @@ class WelcomeViewModel(
     val uiState: StateFlow<WelcomeUiState> = combine(
         repository.lastPosition,
         repository.syncInfo,
+        repository.periodicSyncInfo,
         networkMonitor.isOnline
-    ) { position, infos, isOnline ->
+    ) { position, infos, periodicInfos, isOnline ->
         val info = infos.lastOrNull()
         WelcomeUiState(
             position = position,
@@ -63,7 +65,10 @@ class WelcomeViewModel(
                     ?: "No se pudo completar la descarga"
             } else {
                 null
-            }
+            },
+            // Un trabajo periodico nunca llega a SUCCEEDED: alterna entre ENQUEUED
+            // y RUNNING mientras sigue activo, y solo termina si se cancela.
+            isPeriodicSyncEnabled = periodicInfos.any { !it.state.isFinished }
         )
     }.stateIn(
         scope = viewModelScope,
@@ -74,6 +79,8 @@ class WelcomeViewModel(
     )
 
     fun onDownloadClick() = repository.download()
+
+    fun onPeriodicSyncChange(enabled: Boolean) = repository.setPeriodicSyncEnabled(enabled)
 
     /**
      * runAttemptCount > 0 significa que el intento anterior fallo y el Worker
